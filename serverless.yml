@@ -1,0 +1,83 @@
+service: test-internet-connection
+
+plugins:
+  - serverless-python-requirements
+
+
+package: 
+  # Do not package all functoins in bulk
+  individually: true
+  exclude:
+    - "**"
+
+
+custom:
+  pythonRequirements:
+    # For non Lilnux systems some libraries will be needed (like for ldap library) Build a docker image and use it to package the code
+    #dockerizePip: non-linux
+    #dockerImage: local/lambda:build-python3.7
+    fileName: requirements.txt
+    useStaticCache: true
+    useDownloadCache: true
+
+
+provider:
+  name: aws
+  runtime: python3.7
+  region: ap-southeast-2
+  memorySize: 128 # MB
+  timeout: 90 # seconds
+  versionFunctions: true
+  stage: ${opt:stage, 'internet'} # Set the default stage used. Default is mgmt
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+        - ec2:CreateNetworkInterface
+        - ec2:DescribeNetworkInterfaces
+        - ec2:DeleteNetworkInterface
+      Resource: "*"
+  # Network configuration if required - Uncommend below section and <resources>
+  vpc:
+    VpcId: vpc-XXXX
+    securityGroupIds:
+      - !Ref LambdaInternetSecurityGroup # Reference the ouputs of this stack
+    subnetIds:
+    - subnet-XXXX
+    - subnet-XXXX
+
+
+functions:
+  internet:
+    name: ${self:service}
+    description: Test internet connectivity
+    handler: test_internet_connection/test_internet_connection.lambda_handler
+    package:
+      include:
+        - "!./**"
+        - test_internet_connection/**
+
+
+resources:
+  Resources:
+    LambdaInternetSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+          GroupDescription: Allow all outbound traffic for Lambda
+          VpcId: ${self:provider.vpc.VpcId}
+          SecurityGroupEgress:
+          - IpProtocol: tcp
+            FromPort: 0
+            ToPort: 65535
+            CidrIp: 0.0.0.0/0
+          - IpProtocol: udp
+            FromPort: 0
+            ToPort: 65535
+            CidrIp: 0.0.0.0/0
+  Outputs:
+    LambdaInternetSecurityGroupID:
+      Description: The SecurityGroup of the serverless function
+      Value: !Ref LambdaInternetSecurityGroup
+
